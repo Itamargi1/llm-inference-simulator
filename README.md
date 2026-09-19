@@ -122,18 +122,33 @@ Interactive OpenAPI documentation is available at
 
 ### Quick simulation
 
-With the server running, in a second terminal:
+Leave the server running and open a second terminal. Use the block that
+matches your shell, and do not mix the two syntaxes: `curl` in PowerShell is
+an alias for a different command and will not behave as shown.
+
+#### Windows PowerShell
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/health"
+
+$body = @{ prompt_id = 30 } | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/generate" `
+  -ContentType "application/json" `
+  -Body $body
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/metrics"
+```
+
+#### macOS / Linux / Bash
 
 ```bash
-# 1. liveness
 curl http://127.0.0.1:8000/health
 
-# 2. run one simulated inference (this takes time on purpose)
 curl -X POST http://127.0.0.1:8000/generate \
   -H "Content-Type: application/json" \
-  -d '{"prompt_id": 30}'
+  -d '{"prompt_id":30}'
 
-# 3. inspect what the simulation observed
 curl http://127.0.0.1:8000/metrics
 ```
 
@@ -149,6 +164,36 @@ resulting completion target do.
 To watch queueing and batching, send several requests at once and query
 `/metrics` while they run: `active_requests` rises to the batch limit,
 `queue_depth` grows beyond it, and both return to zero once the work drains.
+
+### Optional browser interface
+
+With the server running, open:
+
+<http://127.0.0.1:8000/docs>
+
+This is FastAPI's interactive Swagger/OpenAPI page. It is an optional browser
+interface to the same API the command-line examples above use, so you do not
+need it, but it is the easiest way to try an endpoint without a terminal.
+
+To run an endpoint:
+
+1. Click an endpoint to expand it.
+2. Click **Try it out**, which enables the inputs.
+3. Enter input if the endpoint needs any.
+4. Click **Execute**.
+5. Read the result under **Server response**.
+
+A few things that confuse first-time Swagger users:
+
+- `GET /health` and `GET /metrics` need no input, so they show
+  **No parameters**. That is expected, not a problem.
+- `POST /generate` needs JSON containing `prompt_id`, for example
+  `{"prompt_id": 30}`.
+- **Schemas** at the bottom of the page are reference definitions of the JSON
+  shapes. They are documentation, not live data.
+- `GenerateResponse` is the shape of a successful response.
+- `HTTPValidationError` is the shape of a possible `422` invalid-input
+  response. **Seeing it listed does not mean an error occurred.**
 
 ## Public API
 

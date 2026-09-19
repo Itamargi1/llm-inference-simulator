@@ -42,15 +42,62 @@ async def lifespan(app: FastAPI):
         scheduler.stop()
 
 
+API_DESCRIPTION = """
+This page is an interactive interface for the local **LLM inference simulator**.
+
+No real language model and no GPU are used. The service simulates how an
+inference server would behave: requests queue, are prefilled, then decode one
+token per scheduler step. Requests therefore take a measurable amount of time
+on purpose.
+
+This page is **optional**. It calls exactly the same API as the `curl` and
+PowerShell examples in the project README.
+
+### How to use this page
+
+1. Expand an endpoint below.
+2. Click **Try it out** to enable its inputs.
+3. Enter input if the endpoint requires any.
+4. Click **Execute** to send the request.
+5. Read the result under **Server response**.
+
+### Main endpoints
+
+- `GET /health` - check that the simulator is running.
+- `POST /generate` - run one simulated inference request.
+- `GET /metrics` - inspect simulator metrics.
+
+### Helpful terms
+
+- **No parameters** means the endpoint needs no input. `/health` and
+  `/metrics` both show this, which is expected.
+- **Responses** lists the possible HTTP outcomes of an endpoint.
+- **Schemas** (at the bottom of the page) are reference definitions of the
+  request and response JSON. They are documentation, not live data.
+- **HTTPValidationError** describes the shape of a possible `422` invalid
+  input response. Seeing it listed does **not** mean an error occurred.
+"""
+
 app = FastAPI(
     title="LLM Inference Simulator",
-    description="A local simulation of a self-hosted vLLM-style inference service.",
+    description=API_DESCRIPTION,
     version="0.8.0",
     lifespan=lifespan,
 )
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Check that the simulator is running",
+    description=(
+        "No input is required, so **No parameters** is expected here.\n\n"
+        "Click **Try it out**, then **Execute**. A successful result is "
+        "`{\"status\": \"ok\"}`.\n\n"
+        "This is only a liveness check: it confirms the process is up and "
+        "serving. It does not check the dataset, the scheduler, or any "
+        "other dependency."
+    ),
+)
 def health() -> dict[str, str]:
     """Liveness probe.
 
@@ -60,7 +107,21 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/metrics")
+@app.get(
+    "/metrics",
+    summary="Inspect simulator metrics",
+    description=(
+        "No input is required, so **No parameters** is expected here.\n\n"
+        "Click **Try it out**, then **Execute**.\n\n"
+        "The response reports request counts, queue depth, active requests, "
+        "batch occupancy, simulated GPU utilization, queue latency, time to "
+        "first token, total latency, recent throughput, and token work.\n\n"
+        "**These values describe the simulation, not real hardware.** "
+        "`simulated_gpu_utilization` comes from the scheduler's own busy and "
+        "idle bookkeeping; no GPU is queried. The README explains what each "
+        "metric means and why it matters."
+    ),
+)
 def metrics() -> dict:
     """Simulator metrics as JSON.
 
@@ -74,7 +135,26 @@ def metrics() -> dict:
     return scheduler.metrics.snapshot(scheduler)
 
 
-@app.post("/generate", response_model=GenerateResponse)
+@app.post(
+    "/generate",
+    response_model=GenerateResponse,
+    summary="Run one simulated inference request",
+    description=(
+        "The main simulator endpoint.\n\n"
+        "Click **Try it out**, enter a dataset `prompt_id` (for example "
+        "`30`), then click **Execute**.\n\n"
+        "The request intentionally takes a measurable amount of time. That "
+        "delay represents simulated queueing, prefill, and decode work. No "
+        "real language model or GPU is called.\n\n"
+        "The returned `content` is deterministic placeholder text, and the "
+        "token counts use the simulator's own approximation rather than a "
+        "real tokenizer.\n\n"
+        "Outcomes:\n\n"
+        "- `200` - the simulated request completed.\n"
+        "- `404` - no prompt with that `prompt_id` exists in the dataset.\n"
+        "- `422` - `prompt_id` was missing or not an integer."
+    ),
+)
 def generate(request: GenerateRequest) -> GenerateResponse:
     """Simulate one inference request.
 
