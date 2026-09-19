@@ -69,7 +69,20 @@ python scripts/generate_dataset.py
 
 ## Setup
 
-Python 3.11 or newer is required.
+Python 3.11 or newer is required. Nothing else: no GPU, no CUDA, and no model
+weights to download.
+
+Clone the repository and enter it:
+
+```bash
+git clone https://github.com/Itamargi1/llm-inference-simulator.git
+cd llm-inference-simulator
+```
+
+**Run every command below from the repository root** (the directory containing
+`README.md` and `requirements.txt`).
+
+Create a virtual environment:
 
 ```bash
 python -m venv .venv
@@ -93,6 +106,10 @@ Install the pinned runtime and test dependencies:
 python -m pip install -r requirements.txt
 python -m pip check
 ```
+
+The full setup flow is therefore: clone the repository, enter it, create the
+virtual environment, activate it, install the requirements, start the server,
+send a simulated request, then inspect the metrics.
 
 ## Run the server
 
@@ -120,12 +137,18 @@ curl -X POST http://127.0.0.1:8000/generate \
 curl http://127.0.0.1:8000/metrics
 ```
 
-Prompt 30 is a medium request and takes roughly 0.65 s, because the simulator
-waits for the prefill and decode work its model predicts. Larger prompt IDs
-such as 8 or 434 take longer. To watch queueing and batching, send several
-requests at once and query `/metrics` while they run: `active_requests` rises
-to the batch limit, `queue_depth` grows beyond it, and both return to zero
-once the work drains.
+`/generate` intentionally takes measurable time. That delay is the simulated
+inference work: the request queues for a batch slot, is prefilled, then decodes
+one token per scheduler step. Prompt 30 is a medium request and takes roughly
+0.65 s.
+
+Prompts with heavier simulated workloads, such as IDs 8 or 434, take longer.
+The ID itself does not control latency; the prompt length, category, and
+resulting completion target do.
+
+To watch queueing and batching, send several requests at once and query
+`/metrics` while they run: `active_requests` rises to the batch limit,
+`queue_depth` grows beyond it, and both return to zero once the work drains.
 
 ## Public API
 
