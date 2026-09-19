@@ -1,0 +1,8 @@
+# Runtime
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5
+
+# Testing
+pytest==9.1.1
+httpx2==2.13.0   # required by fastapi.testclient.TestClient

@@ -1,0 +1,10 @@
+# Normalize line endings to LF in the repository and on checkout, on every
+# platform. Without this, Git's core.autocrlf=true (the Windows default)
+# rewrites files to CRLF when cloning, which breaks two things:
+#
+#   * data/prompts.json is generated with explicit LF endings so it is
+#     byte-identical across operating systems, and a test asserts it contains
+#     no CR bytes. A CRLF checkout would fail that test on a fresh clone.
+#   * the dataset's SHA-256 would differ per platform, defeating the
+#     reproducible-generation guarantee documented in the README.
+* text=auto eol=lf

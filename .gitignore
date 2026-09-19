@@ -1,0 +1,28 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editor-specific config: useful locally, not part of the submission
+.vscode/
+.idea/
+
+# Runtime and scratch output
+*.log
+logs/
+tmp/
+temp/
+scratch/
+*.tmp
+
+# OS metadata
+.DS_Store
+Thumbs.db
