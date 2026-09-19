@@ -103,6 +103,30 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Interactive OpenAPI documentation is available at
 <http://127.0.0.1:8000/docs>.
 
+### Quick simulation
+
+With the server running, in a second terminal:
+
+```bash
+# 1. liveness
+curl http://127.0.0.1:8000/health
+
+# 2. run one simulated inference (this takes time on purpose)
+curl -X POST http://127.0.0.1:8000/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt_id": 30}'
+
+# 3. inspect what the simulation observed
+curl http://127.0.0.1:8000/metrics
+```
+
+Prompt 30 is a medium request and takes roughly 0.65 s, because the simulator
+waits for the prefill and decode work its model predicts. Larger prompt IDs
+such as 8 or 434 take longer. To watch queueing and batching, send several
+requests at once and query `/metrics` while they run: `active_requests` rises
+to the batch limit, `queue_depth` grows beyond it, and both return to zero
+once the work drains.
+
 ## Public API
 
 ### `GET /health`

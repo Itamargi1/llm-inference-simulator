@@ -90,13 +90,12 @@ def generate(request: GenerateRequest) -> GenerateResponse:
     The simulation intentionally omits chunked prefill, KV-cache accounting
     and bounded-queue rejection.
     """
-    # --- RECEIVED: dataset lookup. Already in memory from startup, so this
-    # does not touch disk.
+    # RECEIVED: look the prompt up in the dataset held in memory since
+    # startup, so serving never touches disk.
     record = get_prompt(request.prompt_id)
     if record is None:
-        # Note this is *not* the REJECTED state: no SimulatedRequest exists
-        # yet, and an unknown prompt_id is a client error rather than a
-        # simulated admission decision.
+        # Not the REJECTED state: no request exists yet, and an unknown
+        # prompt_id is a client error rather than an admission decision.
         raise HTTPException(
             status_code=404, detail=f"Unknown prompt_id: {request.prompt_id}"
         )
@@ -111,21 +110,20 @@ def generate(request: GenerateRequest) -> GenerateResponse:
         target_completion_tokens=target_tokens,
     )
 
-    # --- TOKENIZED: prompt size is known.
+    # TOKENIZED: prompt and completion sizes are now known.
     simulated.transition_to(RequestState.TOKENIZED)
 
-    # --- WAITING: enters the FIFO queue. This is a real wait - the request
-    # sits here until a batch slot is free.
+    # WAITING: join the FIFO queue. A real wait, until a batch slot frees.
     simulated.transition_to(RequestState.WAITING)
 
-    # --- The scheduler takes over: PREFILL -> DECODING -> COMPLETED. This
-    # call blocks the HTTP worker thread until the job is done, which is what
-    # makes concurrent callers contend for the one simulated GPU.
+    # The scheduler drives PREFILL -> DECODING -> COMPLETED. This call blocks
+    # until the job finishes, which is what makes concurrent callers contend
+    # for the one simulated GPU.
     job = scheduler.submit(simulated)
     job.wait()
 
     if not job.succeeded:
-        # The worker already moved the request to FAILED and woke us, so the
+        # The worker already marked the request FAILED and woke us, so a
         # caller never hangs on an abandoned job.
         raise HTTPException(
             status_code=500,
@@ -134,10 +132,10 @@ def generate(request: GenerateRequest) -> GenerateResponse:
 
     content = build_content(record.category, record.id, target_tokens)
 
-    # Measured from the text actually returned, so the reported count always
+    # Measured from the text actually returned, so the reported count
     # describes the real payload rather than restating the decode target.
-    # The two can differ by ~2 tokens because the placeholder text is trimmed
-    # on a word boundary.
+    # The two differ by up to ~2 tokens: the placeholder is trimmed on a
+    # word boundary.
     completion_tokens = estimate_tokens(content)
 
     return GenerateResponse(

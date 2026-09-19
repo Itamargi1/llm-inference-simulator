@@ -119,8 +119,7 @@ class ScheduledJob:
 class SingleGPUScheduler:
     """FIFO admission into a continuous batch on one simulated GPU.
 
-    The name still fits: one GPU, one worker - it simply serves several
-    sequences at once now.
+    One GPU and one worker, serving several sequences at once.
 
     Admission is strictly FIFO. Completion order need not match admission
     order, because requests have different completion targets and a short one
@@ -257,11 +256,12 @@ class SingleGPUScheduler:
 
     def _run_worker(self) -> None:
         while self._running:
-            # The simulated GPU counts as busy whenever there is prefill or
-            # decode work to do - never merely because HTTP requests exist.
+            # Busy means prefill or decode work is pending, never merely that
+            # HTTP requests exist.
             if self._active or not self._queue.empty():
                 self._record("mark_busy")
 
+            # WAITING -> PREFILL: admit queued requests into free batch slots.
             self._admit_waiting_requests()
 
             if self._active:
@@ -289,12 +289,10 @@ class SingleGPUScheduler:
 
             job.timing.service_started_at = time.monotonic()
             try:
-                # --- PREFILL: process the whole prompt, paying the fixed
-                # per-request overhead with it.
-                #
-                # The job joins the active set *before* the prefill wait: it
-                # has left the queue and is occupying a slot, so counting it
-                # only afterwards would make the GPU look idle mid-prefill.
+                # PREFILL: process the input prompt before token generation.
+                # The job joins the active set before the wait because it has
+                # left the queue and is occupying a slot; counting it only
+                # afterwards would make the GPU look idle mid-prefill.
                 job.request.transition_to(RequestState.PREFILL)
                 with self._lock:
                     self._active.append(job)
@@ -304,9 +302,8 @@ class SingleGPUScheduler:
                 self._fail(job, exc)
                 continue
 
-            # Prefill work is done, so the prompt has been processed. Counted
-            # here rather than on completion: the work happened even if the
-            # request later fails during decode.
+            # Prompt tokens are counted here, not at completion: the prefill
+            # work happened even if the request later fails during decode.
             self._record(
                 "record_prompt_tokens_processed", job.request.prompt_tokens
             )
@@ -318,21 +315,21 @@ class SingleGPUScheduler:
     def _run_decode_step(self) -> None:
         """One batched decode iteration: one token for every active request.
 
-        Order matters: the step's compute time is spent *first*, and only
-        then does the resulting token become visible. Recording a token
-        before the sleep would make time-to-first-token exclude the very step
-        that produced it, understating what a user actually waits for.
+        Order matters: the step's compute is spent first, and only then does
+        the resulting token become visible. Stamping the token before the
+        wait would make time-to-first-token exclude the step that produced
+        it, understating what a user waits for.
 
-        The single sleep is shared by the whole batch, which is what makes
+        The single wait is shared by the whole batch, which is what makes
         aggregate throughput rise with occupancy.
         """
         with self._lock:
             batch = list(self._active)
 
-        # --- Simulated compute for this step, shared by the whole batch.
+        # DECODE: one simulated token step, shared by the active batch.
         self._sleep(self.gpu.decode_step_seconds)
 
-        # --- The tokens this step produced now become visible.
+        # The tokens this step produced now become visible.
         failed: list[tuple[ScheduledJob, BaseException]] = []
         generated = 0
         for job in batch:
@@ -353,8 +350,9 @@ class SingleGPUScheduler:
         for job, exc in failed:
             self._fail(job, exc)
 
-        # Finished requests leave immediately; their slot is refilled on the
-        # next loop iteration without waiting for the rest of the batch.
+        # COMPLETED: a request that reached its target leaves at once, and
+        # its slot is refilled on the next iteration. Not waiting for the
+        # rest of the batch is what makes the batching continuous.
         for job in batch:
             if job.error is None and job.request.is_decode_complete:
                 self._complete(job)

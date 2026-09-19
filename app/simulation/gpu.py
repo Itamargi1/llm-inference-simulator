@@ -147,13 +147,12 @@ class SimulatedGPU:
         return request.target_completion_tokens / self.profile.decode_tokens_per_second
 
     def estimate_timing(self, request: SimulatedRequest) -> StageTiming:
-        """Predict *isolated* service time: this request alone on the GPU.
+        """Predict isolated service time: this request alone on the GPU.
 
-        Still useful as a per-request work estimate, but under continuous
-        batching it is no longer what the request will observe: its decode
-        steps are shared with other active sequences, and a newly admitted
-        request's prefill can delay a step. Compare with JobTiming, which
-        records what actually happened.
+        A per-request work estimate. Under continuous batching it is not
+        what the request observes, because decode steps are shared with the
+        other active sequences and a newly admitted prefill can delay a step.
+        JobTiming records what actually happened.
         """
         return StageTiming(
             fixed_overhead_seconds=self.profile.fixed_overhead_seconds,
